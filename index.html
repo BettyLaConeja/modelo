@@ -2,7 +2,6 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Juego Cuántico - Schrödinger</title>
 
 <style>
@@ -14,94 +13,72 @@ body {
     color: white;
 }
 
-/* Título adaptable */
 h1 {
+    position: absolute;
+    top: 10px;
+    width: 100%;
     text-align: center;
-    font-size: 5vw;
     color: #00eaff;
-    margin: 10px 0;
 }
 
-/* UI tipo app móvil */
 #ui {
-    position: fixed;
+    position: absolute;
     bottom: 0;
     width: 100%;
-    background: rgba(0,0,30,0.9);
-    padding: 15px;
+    background: rgba(0,0,30,0.85);
+    padding: 20px;
     backdrop-filter: blur(10px);
-    box-sizing: border-box;
 }
 
-/* Caja de pregunta */
 #questionBox {
     background: rgba(0,20,60,0.6);
-    padding: 10px;
+    padding: 15px;
     border-radius: 10px;
     border: 1px solid #00eaff;
-    font-size: 4vw;
 }
 
-/* Botones grandes para dedo */
 button {
-    width: 100%;
-    padding: 15px;
-    margin-top: 8px;
+    padding: 10px;
+    margin: 5px;
     border: none;
     background: #00eaff;
     color: black;
-    font-size: 4vw;
+    cursor: pointer;
     font-weight: bold;
-    border-radius: 8px;
-}
-
-button:active {
-    background: #0097a7;
-}
-
-#score {
-    font-size: 4vw;
-    margin-bottom: 5px;
+    border-radius: 5px;
 }
 
 #feedback {
-    margin-top: 5px;
-    font-size: 4vw;
-    text-align: center;
+    margin-top: 10px;
+    height: 20px;
 }
 
 #resultPanel {
-    position: fixed;
+    position: absolute;
     top: 30%;
     width: 100%;
     text-align: center;
-}
-
-/* Canvas ocupa toda la pantalla */
-canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
+    display: none;
 }
 </style>
 </head>
 
 <body>
 
-<h1>Modelo Cuántico</h1>
+<h1>Juego Cuántico: Modelo de Schrödinger</h1>
 <canvas id="atomCanvas"></canvas>
 
 <div id="ui">
     <div id="score">Puntos: 0</div>
 
     <div id="questionBox">
-        <div id="question">Toca "Comenzar"</div>
+        <div id="question">Presiona "Nueva pregunta"</div>
     </div>
 
     <div id="answers"></div>
     <div id="feedback"></div>
 
-    <button onclick="newQuestion()">Comenzar / Siguiente</button>
+    <button onclick="newQuestion()">Nueva pregunta</button>
 </div>
 
 <div id="resultPanel"></div>
@@ -110,29 +87,22 @@ canvas {
 const canvas = document.getElementById("atomCanvas");
 const ctx = canvas.getContext("2d");
 
-function resizeCanvas(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-}
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
 let centerX = canvas.width / 2;
 let centerY = canvas.height / 2;
 
 let score = 0;
 let totalQuestions = 0;
-let maxQuestions = 5;
+let maxQuestions = 6;
 let gameOver = false;
 
-// ================= SONIDO =================
-let audioStarted = false;
+// ================= SONIDO CUÁNTICO =================
+let audioCtx;
 
 function startQuantumNoise() {
-    if(audioStarted) return;
-    audioStarted = true;
-
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     const bufferSize = 2 * audioCtx.sampleRate;
     const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
@@ -149,19 +119,62 @@ function startQuantumNoise() {
     const gain = audioCtx.createGain();
     gain.gain.value = 0.05;
 
-    noise.connect(gain);
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 400;
+
+    noise.connect(filter);
+    filter.connect(gain);
     gain.connect(audioCtx.destination);
+
     noise.start();
 }
 
-// activa sonido en primer toque
-document.body.addEventListener("touchstart", startQuantumNoise, { once: true });
+document.body.addEventListener("click", () => {
+    if (!audioCtx) startQuantumNoise();
+}, { once: true });
+
+// sonido respuesta
+function playSound(type) {
+    const ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctxAudio.createOscillator();
+    const gain = ctxAudio.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctxAudio.destination);
+
+    osc.frequency.value = (type === "correct") ? 120 : 60;
+    osc.type = "sine";
+    gain.gain.setValueAtTime(0.2, ctxAudio.currentTime);
+
+    osc.start();
+    osc.stop(ctxAudio.currentTime + 0.3);
+}
+
+// ================= NÚCLEO =================
+let nucleusEffect = null;
+
+function drawNucleus() {
+    let color = "#ff0077";
+
+    if (nucleusEffect === "correct") color = "#00ff88";
+    if (nucleusEffect === "wrong") color = "#ff0033";
+
+    let g = ctx.createRadialGradient(centerX, centerY, 5, centerX, centerY, 40);
+    g.addColorStop(0, "#fff");
+    g.addColorStop(1, color);
+
+    ctx.beginPath();
+    ctx.fillStyle = g;
+    ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
+    ctx.fill();
+}
 
 // ================= ELECTRONES =================
 class Electron {
     constructor() {
         this.angle = Math.random() * Math.PI * 2;
-        this.radius = Math.random() * 120 + 20;
+        this.radius = Math.random() * 150 + 20;
         this.speed = Math.random() * 0.01 + 0.002;
     }
 
@@ -181,11 +194,13 @@ class Electron {
 }
 
 let electrons = [];
-for (let i = 0; i < 150; i++) electrons.push(new Electron()); // menos carga móvil
+for (let i = 0; i < 250; i++) electrons.push(new Electron());
 
 function animate() {
-    ctx.fillStyle = "rgba(0,0,20,0.3)";
+    ctx.fillStyle = "rgba(0,0,20,0.2)";
     ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    drawNucleus();
 
     electrons.forEach(e=>{
         e.update();
@@ -198,10 +213,36 @@ animate();
 
 // ================= PREGUNTAS =================
 const questions = [
-{ q: "¿Qué describe un orbital?", options: ["Órbita fija","Probabilidad","Trayectoria"], correct: 1 },
-{ q: "Electrón en este modelo:", options: ["Planeta","Onda","Fijo"], correct: 1 },
-{ q: "¿Hay órbitas exactas?", options: ["Sí","No"], correct: 1 },
-{ q: "¿Qué cambia?", options: ["Nada","Nube electrónica","Núcleo"], correct: 1 }
+{
+q: "¿Qué representa un orbital?",
+options: ["Trayectoria fija", "Región de probabilidad", "Órbita circular"],
+correct: 1
+},
+{
+q: "¿Cómo se comporta el electrón?",
+options: ["Como planeta", "Como onda", "Como esfera"],
+correct: 1
+},
+{
+q: "¿Qué describe la función de onda?",
+options: ["Velocidad", "Probabilidad", "Masa"],
+correct: 1
+},
+{
+q: "¿Hay órbitas exactas?",
+options: ["Sí", "No"],
+correct: 1
+},
+{
+q: "¿Qué cambia constantemente?",
+options: ["El núcleo", "La nube electrónica", "Nada"],
+correct: 1
+},
+{
+q: "¿Qué introduce la incertidumbre?",
+options: ["Error experimental", "Principio cuántico", "Falta de datos"],
+correct: 1
+}
 ];
 
 function showFeedback(text, color) {
@@ -212,10 +253,12 @@ function showFeedback(text, color) {
 
 function endGame() {
     gameOver = true;
+    document.getElementById("ui").style.display = "none";
 
+    document.getElementById("resultPanel").style.display = "block";
     document.getElementById("resultPanel").innerHTML = `
-        <h2>Puntaje final</h2>
-        <p>${score}</p>
+        <h2>Resultado final</h2>
+        <p>Puntaje: ${score}</p>
         <button onclick="location.reload()">Reiniciar</button>
     `;
 }
@@ -247,15 +290,19 @@ function newQuestion() {
 
             if (i === q.correct) {
                 score += 10;
+                nucleusEffect = "correct";
                 showFeedback("✔ Correcto", "#00ff88");
+                playSound("correct");
             } else {
                 score -= 5;
+                nucleusEffect = "wrong";
                 showFeedback("✖ Incorrecto", "#ff4444");
+                playSound("wrong");
             }
 
             document.getElementById("score").innerText = "Puntos: " + score;
 
-            setTimeout(newQuestion, 1000);
+            setTimeout(newQuestion, 1200);
         };
 
         answersDiv.appendChild(btn);
